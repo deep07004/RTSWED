@@ -1,1 +1,1 @@
-# RTSWED
+## RTSWED (Real-time surface wave based event detector)
