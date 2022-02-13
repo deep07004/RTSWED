@@ -11,6 +11,13 @@ for i in range(n):
     pp[i,0] = np.float64(ff[2])
     pp[i,1] = np.float64(ff[1])
 tri = Delaunay(pp)
+for xx in tri.simplices:
+    for i in range(xx):
+        j=(i+1)%3
+        a = pp[i,0]
+        b = pp[j,0]
+
+
 plt.triplot(pp[:,0],pp[:,1],tri.simplices.copy())
 a = tri.simplices[0]
 plt.plot(pp[a,0],pp[a,1],'r*')
