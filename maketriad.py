@@ -19,5 +19,5 @@ def maketriads(stations, minlen=10, maxlen=600, minang=30, maxang=120):
     pp = np.zeros((nsta,2))
     for i in range(nsta):
         pp[i,0] = stations[i,1]
-        pp[i,0] = stations[i,2]
+        pp[i,1] = stations[i,2]
     return triads, ntriad
