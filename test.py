@@ -1,51 +1,52 @@
 #!/usr/bin/env python
+import sys
 from scipy.spatial import Delaunay
 import numpy as np
 import matplotlib.pyplot as plt
+from geographiclib.geodesic import Geodesic
+from obspy import read_inventory
 
-fp=open('stations.txt').readlines()
-n=len(fp)
+gl = Geodesic.WGS84
+
+sta_list=[]
+inv = read_inventory(sys.argv[1])
+for nt in inv.networks:
+    for sta in nt.stations:
+        sta_list.append([nt.code+'.'+sta.code,sta.latitude,sta.longitude,sta.elevation])
+n=len(sta_list)
 pp = np.zeros((n,2))
 for i in range(n):
-    ff = fp[i].split(' ')
+    ff = sta_list[i]
     pp[i,0] = np.float64(ff[2])
     pp[i,1] = np.float64(ff[1])
 tri = Delaunay(pp)
-for xx in tri.simplices:
-    for i in range(xx):
-        j=(i+1)%3
-        a = pp[i,0]
-        b = pp[j,0]
+ss=(np.zeros(np.shape(tri.simplices)[0])==0)
+### for l, xx in enumerate(tri.simplices):
+###     for i in range(3):
+###         j = (i+1)%3
+###         a = xx[i]
+###         b = xx[j]
+###     # Check the side length
+###         side_length = gl.Inverse(pp[a,1],pp[a,0],pp[b,1],pp[b,0])
+###         if side_length['s12']/1000 < 10 or side_length['s12']/1000 > 600:
+###             ss[l] = False
+###     # Check for interior angle
+for l, xx in enumerate(tri.simplices):
+    dist = np.zeros(3)
+    ang = np.zeros(3)
+    dist[0] = gl.Inverse(pp[xx[0],1],pp[xx[0],0],pp[xx[1],1],pp[xx[1],0])['s12']/1000.0
+    dist[1] = gl.Inverse(pp[xx[0],1],pp[xx[0],0],pp[xx[2],1],pp[xx[2],0])['s12']/1000.0
+    dist[2] = gl.Inverse(pp[xx[1],1],pp[xx[1],0],pp[xx[2],1],pp[xx[2],0])['s12']/1000.0
+    dist.sort()
+    ang[0] = np.arccos((dist[1]**2 + dist[2] **2 - dist[0] **2) / (2 * dist[1] * dist[2]))
+    ang[1] = np.arccos((dist[0]**2 + dist[2] **2 - dist[1] **2) / (2 * dist[0] * dist[2]))
+    ang[2] = np.arccos((dist[0]**2 + dist[1] **2 - dist[2] **2) / (2 * dist[0] * dist[1]))
+    ang *= 180.0/np.pi
+    ang.sort()
+    if dist[0] < 50 or dist[2] > 600 :
+        ss[l] = False
+    if ang[0] < 30 or ang[2] > 120:
+        ss[l] = False
 
-
-plt.triplot(pp[:,0],pp[:,1],tri.simplices.copy())
-a = tri.simplices[0]
-plt.plot(pp[a,0],pp[a,1],'r*')
+plt.triplot(pp[:,0],pp[:,1],tri.simplices[ss])
 plt.show()
-
-###  thresh = 1.0  # user defined threshold
-###  small_edges = set()
-###  large_edges = set()
-###  for tr in tri.vertices:
-###      for i in xrange(3):
-###          edge_idx0 = tr[i]
-###          edge_idx1 = tr[(i+1)%3]
-###          if (edge_idx1, edge_idx0) in small_edges:
-###              continue  # already visited this edge from other side
-###          if (edge_idx1, edge_idx0) in large_edges:
-###              continue
-###          p0 = points[edge_idx0]
-###          p1 = points[edge_idx1]
-###          if np.linalg.norm(p1 - p0) <  thresh:
-###              small_edges.add((edge_idx0, edge_idx1))
-###          else:
-###              large_edges.add((edge_idx0, edge_idx1))
-###  
-###  # Plotting the output
-###  figure()
-###  plot(points[:, 0], points[:, 1], '.')
-###  for i, j in small_edges:
-###      plot(points[[i, j], 0], points[[i, j], 1], 'b')
-###  for i, j in large_edges:
-###      plot(points[[i, j], 0], points[[i, j], 1], 'c')
-###  
