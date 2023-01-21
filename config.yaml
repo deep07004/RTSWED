@@ -1,0 +1,30 @@
+# Absolute path to the directory where all results and data will be saved  
+Work_dir: .
+
+# Directory containing station xml files to create triads 
+Inventory: inventory
+
+# Triad formation criterias
+Triad:
+  min_side_length: 20
+  max_side_lenght: 600
+  min_angle: 20
+  max_angle: 120
+
+# Method to load seismic waveforms for processing. Here all three methods
+# supported by obspy to load seimic waveform data can be used. i.e. FDSNWS-
+# dataselect, SeedLink, and SDS archive. SDS archive is expected to be fastest
+# and SeedLink is the slowest of all. You may use as many services as you want.
+# The retrived seimic waveformws will be merged before processing. 
+Stream:
+  Service:
+    - [FDSNWS, http://service.iris.edu]
+    - [SDS, /home/deep/SMM_workdir/data/archive]
+
+# Filters to be used
+Filter:
+  - [0.05, 0.01]
+# Cross-correlation time steps and overlap
+time_step: [200,20]
+# If an event is detected by n_detect no of triads, further processing will be initiated.
+n_detetct: 10
