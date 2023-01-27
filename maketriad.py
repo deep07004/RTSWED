@@ -4,6 +4,7 @@ from scipy.spatial import Delaunay
 import numpy as np
 import pandas as pd
 from geographiclib.geodesic import Geodesic
+from triad import Triad, Triads
 
 def maketriad(inv, minlen=10, maxlen=600, minang=30, maxang=120):
     """
@@ -23,40 +24,29 @@ def maketriad(inv, minlen=10, maxlen=600, minang=30, maxang=120):
                 column 3 is elevation 
     """
     gl = Geodesic.WGS84
-    sta_list = []
-    for nt in inv.networks:
-        for sta in nt.stations:
-            sta_list.append([nt.code+'.'+sta.code,sta.latitude,sta.longitude,sta.elevation])
+    sta_list = [[nt.code+'.'+sta.code,sta.latitude,sta.longitude,sta.elevation] for nt in inv for sta in nt.stations]
 
     stations = pd.DataFrame(sta_list)
-    stations.set_index(0,inplace=True)
+    #stations.set_index(0,inplace=True)
     pp = np.array(stations[[2,1]])
     tri = Delaunay(pp)
     ss=(np.zeros(np.shape(tri.simplices)[0])==0)
-    # Check the side length
-    # Check for interior angle
-    for l, xx in enumerate(tri.simplices):
-        dist = np.zeros(3)
-        ang = np.zeros(3)
-        dist[0] = gl.Inverse(pp[xx[0],1],pp[xx[0],0],pp[xx[1],1],pp[xx[1],0])['s12']/1000.0
-        dist[1] = gl.Inverse(pp[xx[0],1],pp[xx[0],0],pp[xx[2],1],pp[xx[2],0])['s12']/1000.0
-        dist[2] = gl.Inverse(pp[xx[1],1],pp[xx[1],0],pp[xx[2],1],pp[xx[2],0])['s12']/1000.0
+    td = Triads()
+    for l, sipmlices in enumerate(tri.simplices):
+        sta = []
+        for i in sipmlices:
+            a = [stations.iloc[i][0],stations.iloc[i][1],stations.iloc[i][2]]
+            sta.append(a)
+        _tmp_td = Triad(sta)
+        # Check the side length
+        # Check for interior angle
+        dist = _tmp_td.dist
+        ang = _tmp_td.ang
         dist.sort()
-        ang[0] = np.arccos((dist[1]**2 + dist[2] **2 - dist[0] **2) / (2 * dist[1] * dist[2]))
-        ang[1] = np.arccos((dist[0]**2 + dist[2] **2 - dist[1] **2) / (2 * dist[0] * dist[2]))
-        ang[2] = np.arccos((dist[0]**2 + dist[1] **2 - dist[2] **2) / (2 * dist[0] * dist[1]))
-        ang *= 180.0/np.pi
         ang.sort()
         if dist[0] < minlen or dist[2] > maxlen :
-            ss[l] = False
+            continue
         if ang[0] < minang or ang[2] > maxang:
-            ss[l] = False
-    traids_list = []
-    for t in tri.simplices[ss]:
-        _tmp =[]
-        for i in t:
-            _a  = stations[stations[1] == pp[i,1]]
-            _tmp.append(_a[_a[2] == pp[i,0]].index[0])
-        traids_list.append(_tmp)
-    triads = pd.DataFrame(traids_list)
-    return triads, stations
+            continue
+        td.append(_tmp_td)
+    return td

@@ -22,20 +22,21 @@ args = parser.parse_args()
 # to proceed further 
 cfg = read(args.config)
 inv = read_inventory('Inventory.xml')
-triads, stations = maketriad.maketriad(inv, minlen=10, maxlen=1200, minang=10, maxang=120)
+sta_list = [[nt.code+'.'+sta.code,sta.latitude,sta.longitude,sta.elevation] for nt in inv for sta in nt.stations]
+stations = pd.DataFrame(sta_list)
+triads = maketriad.maketriad(inv, minlen=10, maxlen=1200, minang=10, maxang=120)
 reg = [ 105, 182, -48, -2 ]
 grid = pygmt.datasets.load_earth_relief(resolution="02m", region=reg)
 fig = pygmt.Figure()
 pygmt.makecpt(cmap="terra", series=[-8000, 8000])
 fig.basemap(region=reg, projection="M15c",frame=True)
 fig.grdimage(grid=grid,shading=True)
-for i in triads.index:
+for td in triads.triads:
     lat = []
     lon = []
-    for a in triads.loc[i]:
-        _tmp = stations.loc[a]
-        lat.append(_tmp[1])
-        lon.append(_tmp[2])
+    for a in td.stations:
+        lat.append(a[1])
+        lon.append(a[2])
     lat.append(lat[0])
     lon.append(lon[0])
     for j in range(3):
