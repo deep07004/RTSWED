@@ -41,6 +41,7 @@ for td in triads.triads:
     lon.append(lon[0])
     for j in range(3):
         fig.plot(x=lon[j:j+2], y=lat[j:j+2], pen='0.35p')
+    fig.plot(x=td.clon,y=td.clat, style="a0.2c",color="cyan" )
 fig.plot(stations[[2,1]],style="t0.25c", color="red")
 fig.savefig('triad.jpg')
 fig.show()

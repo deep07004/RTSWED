@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 from geographiclib.geodesic import Geodesic
 class Triad(object):
     def __init__(self, stations=[]):
@@ -7,6 +6,7 @@ class Triad(object):
             return None
         self.stations = stations
         self.dist, self.ang = self.calc_dis_ang()
+        self.clat, self.clon = self.centroid()
         self.cc = np.zeros(3)
         self.dt = np.zeros(3)
 
@@ -24,6 +24,27 @@ class Triad(object):
         ang[2] = np.arccos((dist[0]**2 + dist[1] **2 - dist[2] **2) / (2 * dist[0] * dist[1]))
         ang *= 180.0/np.pi
         return dist, ang
+    def centroid(self):
+        gl = Geodesic.WGS84
+        R = gl.a
+        sta = self.stations
+        lat = np.array([90-sta[i][1] for i in range(3)])
+        lon = np.array([sta[i][2] for i in range(3)])
+        lat *= np.pi/180
+        lon *= np.pi/180
+        X = R*np.sin(lat)*np.cos(lon)
+        Y = R*np.sin(lat)*np.sin(lon)
+        Z = R*np.cos(lat)
+        X3DC = X.mean()
+        Y3DC = Y.mean()
+        Z3DC = Z.mean()
+        L = np.sqrt(X3DC**2 + Y3DC**2 + Z3DC**2)
+        XC = X3DC/L
+        YC = Y3DC/L
+        ZC = Z3DC/L
+        clat = 90 - (np.arctan2(np.sqrt(XC**2 + YC**2),ZC))*180/np.pi
+        clon = np.arctan2(YC, XC) * 180/np.pi
+        return clat, clon
 
 class Triads(object):
     """
