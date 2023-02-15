@@ -17,11 +17,7 @@ def maketriad(inv, minlen=10, maxlen=600, minang=30, maxang=120):
       minang : minimum interior angle of a triad
       maxang : maximum interior angle of a triad
     Outoput:
-      traids : panda data frame of triads containing nt.code of
-               three stations in each row.
-      stations : panda data frame of stations indexed by nt.sta
-                column 1 is latitude, column 2 is longitude and
-                column 3 is elevation 
+      traids : list of triad
     """
     gl = Geodesic.WGS84
     sta_list = [[nt.code+'.'+sta.code,sta.latitude,sta.longitude,sta.elevation] for nt in inv for sta in nt.stations]
