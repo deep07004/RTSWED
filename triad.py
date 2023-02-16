@@ -12,11 +12,14 @@ class Triad(object):
         self.clat, self.clon, self.CX, self.CY, self.Amat = self.centroid()
         self.cc = np.zeros(3)
         self.dt = np.zeros(3)
+        self.alpha = 0.0
         self.apvel = 0.0
         self.azm = 0.0
         self.detection = False
         self.have_data = False
         self.data = None
+        self.beam = None
+        self.BFS = None
     
     def calc_dis_ang(self):
         gl = Geodesic.WGS84
@@ -78,13 +81,35 @@ class Triad(object):
             self.dt[2], self.cc[2] = cross_correlation.xcorr_max(c)
             if np.amax(self.cc) >= 0.5 and np.sum(self.dt) <=50:
                 alpha = np.linalg.lstsq(self.Amat, self.dt,rcond=None)[0]
+                self.alpha = alpha
                 self.apvel = 1.0/np.sqrt(np.sum(alpha**2))
                 self.azm = np.arctan2(alpha[0],alpha[1]) * 180.0/np.pi
                 self.detection = True
         else:
             pass
-
-
+    def beamform(self):
+        if self.detection:
+            tr = self.data[0].copy()
+            t1 = np.ceil(self.CX[0]*self.alpha[0] + self.CY[0]*self.alpha[1])
+            t2 = np.ceil(self.CX[1]*self.alpha[0] + self.CY[1]*self.alpha[1])
+            t3 = np.ceil(self.CX[2]*self.alpha[0] + self.CY[2]*self.alpha[1])
+            tr.stats.station = "BFS"
+            tr.data = np.roll(self.data[0].data, int(t1)) + np.roll(self.data[1].data, int(t2)) + np.roll(self.data[2].data, int(t3))
+            ii = np.argmax(tr.data)
+            self.beam = [tr.stats.starttime + tr.stats.delta * ii, tr.data[ii]]
+            self.BFS = tr
+    
+    def reset(self):
+        self.cc = np.zeros(3)
+        self.dt = np.zeros(3)
+        self.alpha = 0.0
+        self.apvel = 0.0
+        self.azm = 0.0
+        self.detection = False
+        self.have_data = False
+        self.data = None
+        self.beam = None
+        self.BFS = None
 
 class Triads(object):
     """
@@ -181,6 +206,7 @@ class Triads(object):
         1. Request data from source.
         2. Preprocess: filter, resample and align.
         """
+        from obspy.signal.filter import envelope
         if not start:
             end = UTCDateTime.now() -10
             start = end - 300
@@ -204,6 +230,8 @@ class Triads(object):
                 st.filter('bandpass', freqmin=1/250, freqmax=1/20)
                 st.resample(target_sps,window='cosine')
                 st.normalize()
+                for tr in st:
+                    tr.data = envelope(tr.data)
                 td.data = st
                 td.have_data = True
             else:
