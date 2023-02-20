@@ -224,6 +224,14 @@ class Triads(object):
                 except:
                     print("No data for ", s[0],s[1],"*", "?HZ", start, end)
                     continue
+            sss = [tr.stats.starttime for tr in st]
+            eee = [tr.stats.endtime for tr in st]
+            sss.sort()
+            eee.sort(reverse=True)
+            if (start - sss[0]) > 0.1*(end-start) or (eee[0]-end) > 0.1*(end-start):
+                continue
+            else:
+                st.trim(sss[0],eee[0])
             if st.count() == 3:
                 st.detrend("demean")
                 st.detrend("linear")
