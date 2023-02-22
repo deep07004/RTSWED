@@ -3,6 +3,43 @@ import copy
 from obspy import UTCDateTime, Stream
 from obspy.clients.filesystem.sds import Client as SDS
 from geographiclib.geodesic import Geodesic
+from obspy.signal import cross_correlation
+from obspy.signal.filter import envelope
+
+def request_data(i, td, start, end, sps, sds_arc):
+    sds = SDS(sds_arc)
+    st = Stream()
+    for sta in td.stations:
+        s = sta[0].split('.')
+        try:
+            st += sds.get_waveforms(s[0],s[1],"*", "?HZ", start, end)[0]
+        except:
+            break
+    if st.count() > 0:
+        st.merge(fill_value=0)
+        st.detrend("demean")
+        st.detrend("linear")
+        st.filter('bandpass', freqmin=1/250, freqmax=1/50)
+        st.resample(sps, window='cosine')
+        sss = [tr.stats.starttime for tr in st]
+        eee = [tr.stats.endtime for tr in st]
+        sss.sort(reverse=True)
+        eee.sort()
+        t1 = sss[0] + (1000000-sss[0].microsecond)/1000000
+        t2 = eee[0] - eee[0].microsecond/1000000
+        if (t2-t1) < 100 :
+            st.clear()
+        else:
+            st.trim(t1,t2)
+    if st.count() == 3:
+        st.normalize()
+        for tr in st:
+            tr.data = envelope(tr.data)
+        return (i, st)
+    else:
+        return (-1,-1)
+
+
 class Triad(object):
     def __init__(self, stations=[]):
         if len(stations) != 3:
@@ -71,7 +108,6 @@ class Triad(object):
         return copy.deepcopy(self)
     
     def correlate(self,shift=300):
-        from obspy.signal import cross_correlation
         if self.have_data:
             a = cross_correlation.correlate(self.data[0].data,self.data[1].data,shift=shift)
             b = cross_correlation.correlate(self.data[0].data,self.data[2].data,shift=shift)
@@ -79,11 +115,14 @@ class Triad(object):
             self.dt[0], self.cc[0] = cross_correlation.xcorr_max(a)
             self.dt[1], self.cc[1] = cross_correlation.xcorr_max(b)
             self.dt[2], self.cc[2] = cross_correlation.xcorr_max(c)
-            if np.amax(self.cc) >= 0.5 and np.sum(self.dt) <=50:
+            if np.amax(self.cc) >= 0.5 and abs(np.sum(self.dt)) <=50:
                 alpha = np.linalg.lstsq(self.Amat, self.dt,rcond=None)[0]
                 self.alpha = alpha
                 self.apvel = 1.0/np.sqrt(np.sum(alpha**2))
-                self.azm = np.arctan2(alpha[0],alpha[1]) * 180.0/np.pi
+                azm = np.arctan2(alpha[0],alpha[1]) * 180.0/np.pi + 180
+                if azm > 180:
+                    azm -= 360.0
+                self.azm = azm
                 self.detection = True
         else:
             pass
@@ -201,12 +240,11 @@ class Triads(object):
                 active_triads.append(td)
         return self.__class__(triads=active_triads)
 
-    def get_waveform(self, start=None, end=None, source=None, target_sps=1):
+    def get_waveform__(self, start=None, end=None, source=None, target_sps=1):
         """
         1. Request data from source.
         2. Preprocess: filter, resample and align.
         """
-        from obspy.signal.filter import envelope
         if not start:
             end = UTCDateTime.now() -10
             start = end - 300
@@ -224,23 +262,72 @@ class Triads(object):
                 except:
                     print("No data for ", s[0],s[1],"*", "?HZ", start, end)
                     continue
-            sss = [tr.stats.starttime for tr in st]
-            eee = [tr.stats.endtime for tr in st]
-            sss.sort()
-            eee.sort(reverse=True)
-            if (start - sss[0]) > 0.1*(end-start) or (eee[0]-end) > 0.1*(end-start):
-                continue
-            else:
-                st.trim(sss[0],eee[0])
-            if st.count() == 3:
+            if st.count() > 0:
+                st.merge(fill_value=0)
                 st.detrend("demean")
                 st.detrend("linear")
                 st.filter('bandpass', freqmin=1/250, freqmax=1/20)
                 st.resample(target_sps,window='cosine')
+                sss = [tr.stats.starttime for tr in st]
+                eee = [tr.stats.endtime for tr in st]
+                sss.sort(reverse=True)
+                eee.sort()
+                t1 = sss[0] + (1000000-sss[0].microsecond)/1000000
+                t2 = eee[0] - eee[0].microsecond/1000000
+                if (t2-t1) < 100 :
+                    continue
+                else:
+                    st.trim(t1,t2)
+            if st.count() == 3:
                 st.normalize()
-                for tr in st:
-                    tr.data = envelope(tr.data)
+                #for tr in st:
+                #    tr.data = envelope(tr.data)
                 td.data = st
                 td.have_data = True
             else:
                 continue
+    def get_waveform(self, start=None, end=None, source=None, target_sps=1):
+        """
+        1. Request data from source.
+        2. Preprocess: filter, resample and align.
+        """
+        import concurrent.futures
+        from tqdm import tqdm
+
+        if not start:
+            end = UTCDateTime.now() -10
+            start = end - 300
+        if not source:
+            raise ValueError("No data source defined")
+        if source[0] == "sds":
+            sds_arch = source[1]
+        processes = []
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            for i, td in enumerate(self.triads):
+                p = executor.submit(request_data,i, td, start, end, target_sps,sds_arch)
+                processes.append(p)
+            pbar = tqdm(total=len(processes), desc='Overall progress')
+            for f in concurrent.futures.as_completed(processes):
+                jj = f.result()[0]
+                if jj == -1:
+                    continue
+                else:
+                    self.triads[jj].data = f.result()[1]
+                    self.triads[jj].have_data = True
+                pbar.update(n=1)
+    def map_plot(self,center=[0.0,0.0],x=20,y=20):
+        import pygmt
+        import pandas as pd
+        proj = "A%f/%f/5i" %(center[0],center[1])
+        fig = pygmt.Figure()
+        fig.basemap(region="g", projection=proj, frame=True)
+        fig.coast(shorelines=True)
+        sta= []
+        for td in self.triads:
+            if td.detection and (td.apvel > 2.5 and td.apvel<5.5):
+                sta.append([td.clon,td.clat,td.azm, 1.0])
+        s = pd.DataFrame(sta)
+        fig.plot(x=center[0],y=center[1],style="a0.8c",color="red")
+        fig.plot(x=s[0],y=s[1], style="V0.2c+ea+bc",direction=[s[2],s[3]],pen="0.5p",color="cyan" )
+        fig.savefig('triad.jpg')
+        fig.show()

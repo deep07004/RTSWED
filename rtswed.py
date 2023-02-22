@@ -22,27 +22,22 @@ args = parser.parse_args()
 # to proceed further 
 cfg = read(args.config)
 inv = read_inventory('Inventory.xml')
-sta_list = [[nt.code+'.'+sta.code,sta.latitude,sta.longitude,sta.elevation] for nt in inv for sta in nt.stations]
-stations = pd.DataFrame(sta_list)
+#inv =  read_inventory('../Turkey.xml')
 triads = maketriad.maketriad(inv, minlen=10, maxlen=1200, minang=10, maxang=120)
-reg = [ 105, 182, -48, -2 ]
-grid = pygmt.datasets.load_earth_relief(resolution="02m", region=reg)
-fig = pygmt.Figure()
-pygmt.makecpt(cmap="terra", series=[-8000, 8000])
-fig.basemap(region=reg, projection="M15c",frame=True)
-fig.grdimage(grid=grid,shading=True)
-for td in triads.triads:
-    lat = []
-    lon = []
-    for a in td.stations:
-        lat.append(a[1])
-        lon.append(a[2])
-    lat.append(lat[0])
-    lon.append(lon[0])
-    for j in range(3):
-        fig.plot(x=lon[j:j+2], y=lat[j:j+2], pen='0.35p')
-    fig.plot(x=td.clon,y=td.clat, style="a0.2c",color="cyan" )
-fig.plot(stations[[2,1]],style="t0.25c", color="red")
-fig.savefig('triad.jpg')
-fig.show()
-print(triads)
+
+t1 = UTCDateTime("2022-1-15T04:14:45")
+#t1 = UTCDateTime("2023-02-06T01:17:35") + 400
+t2= t1+3600
+
+triads.get_waveform(start=t1,end=t2,source = ['sds','/home/deep/CWP/Landslide/Tonga/buffer'])
+#triads.get_waveform(start=t1,end=t2,source = ['sds','/home/deep/CWP/Landslide/Turkey'])
+
+for td in triads:
+    td.correlate(shift=3000)
+    td.beamform()
+a = triads.select_active()
+for i, td in enumerate(triads):
+    if td.detection:
+        s = "%d %0.4f %0.4f %0.2f %0.2f %s %0.2f\n" %(i,td.clat, td.clon, td.azm, td.apvel, td.beam[0],td.beam[1])
+        print(s)
+triads.map_plot(center=[140,-35])
