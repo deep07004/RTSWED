@@ -1,13 +1,13 @@
 # Absolute path to the directory where all results and data will be saved  
-Work_dir: .
+Work_dir: ..
 
 # Directory containing station xml files to create triads 
-Inventory: Inventory.xml
+Inventory: Turkey.xml
 
 # Triad formation criterias
 Triad:
   min_side_length: 60
-  max_side_length: 1200
+  max_side_length: 600
   min_angle: 20
   max_angle: 120
 
@@ -15,13 +15,13 @@ Triad:
 # supported by obspy to load seimic waveform data can be used. i.e. FDSNWS-
 # dataselect, SeedLink, and SDS archive. 
 #Source: [FDSNWS, http://service.iris.edu]
-Source: [SDS, /home/deep/CWP/Landslide/Tonga/buffer]
-#Source: [SDS, /home/deep/CWP/Landslide/Turkey]
+#Source: [SDS, /home/deep/CWP/Landslide/Tonga/buffer]
+Source: [SDS, /home/deep/CWP/Landslide/Turkey]
 
 # Filters to be used
 Filter: [0.02, 0.05]
 # Target sampling rate
-target_sps: 1
+target_sps: 20
 # Cross-correlation time steps and overlap
 time_step: [600,180]
 # If an event is detected by n_detect no of triads, further processing will be initiated.

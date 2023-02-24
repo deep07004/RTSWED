@@ -49,8 +49,9 @@ def request_data(i, td, start, end, sps,fl,fh, method):
         except:
             print("No data for stations %s" %sta)
             return (-1,-1)
+    npts = [x.stats.npts for x in tr]
     st = tr.copy()
-    if st.count() == 3:
+    if st.count() == 3 and np.mean(npts) == npts[0]:
         st.normalize()
         for tr in st:
             tr.data = envelope(tr.data)
@@ -160,7 +161,56 @@ class Triad(object):
             ii = np.argmax(tr.data)
             self.beam = [tr.stats.starttime + tr.stats.delta * ii, tr.data[ii]]
             self.BFS = tr
-    
+    def get_waveform(self,start, end, sps,fl,fh, method):
+        st = Stream()
+        streams = [(sta[0].split('.')[0], sta[0].split('.')[1],'*',"?HZ", start, end) for sta in self.stations]
+        if method[0] == "SDS":
+            sds = SDS(method[1])
+            try:
+                st += sds.get_waveforms_bulk(streams)
+            except:
+                pass
+        if method[0] == "FDSNWS":
+            fdsnws = Client(method[1])
+            try:
+                st += fdsnws.get_waveforms_bulk(streams)
+            except:
+                pass
+        if st.count() > 0:
+            st.merge(fill_value=0)
+            st.detrend("demean")
+            st.detrend("linear")
+            st.filter('bandpass', freqmin=fl, freqmax=fh)
+            st.resample(sps, window='cosine')
+            sss = [tr.stats.starttime for tr in st]
+            eee = [tr.stats.endtime for tr in st]
+            sss.sort(reverse=True)
+            eee.sort()
+            t1 = sss[0] + (1000000-sss[0].microsecond)/1000000
+            t2 = eee[0] - eee[0].microsecond/1000000
+            if (t2-t1) < 100 :
+                st.clear()
+            else:
+                st.trim(t1,t2)
+
+        tr = Stream()
+        for sta in self.stations:
+            s = sta[0].split('.')[1]
+            try:
+                tr +=  st.select(station=s).sort(reverse=True)[0]
+            except:
+                print("No data for stations %s" %sta)
+                return (-1,-1)
+        npts = [x.stats.npts for x in tr]
+        st = tr.copy()
+        if st.count() == 3 and np.mean(npts) == npts[0]:
+            st.normalize()
+            for tr in st:
+                tr.data = envelope(tr.data)
+            self.data = st
+        else:
+            self.data = None
+
     def reset(self):
         self.cc = np.zeros(3)
         self.dt = np.zeros(3)
@@ -256,10 +306,15 @@ class Triads(object):
             raise TypeError(msg)
         return self
     
-    def select_active(self):
+    def select_active(self, apvel=None, azm=None):
+        if not apvel:
+            apvel=[0,100]
+        if not azm:
+            azm=[0,360] 
         active_triads = []
         for td in self.triads:
-            if td.detection:
+            if td.detection and td.apvel >= apvel[0] and td.apvel <= apvel[1] \
+                and td.azm >= azm[0] and td.azm<= azm[1]:
                 active_triads.append(td)
         return self.__class__(triads=active_triads)
 

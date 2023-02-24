@@ -27,8 +27,8 @@ triads = maketriad.maketriad(inv, minlen=cfg['Triad']['min_side_length'], \
     maxlen=cfg['Triad']['max_side_length'], minang=cfg['Triad']['min_angle'],\
     maxang=cfg['Triad']['max_angle'])
 
-ot = UTCDateTime("2022-1-15T04:14:45")
-#t1 = UTCDateTime("2023-02-06T01:17:35") + 400
+#ot = UTCDateTime("2022-1-15T04:14:45")
+ot = UTCDateTime("2023-02-06T01:17:35") 
 fp = open("out.txt","w")
 for i in range(13):
     t1= ot + 180*i
