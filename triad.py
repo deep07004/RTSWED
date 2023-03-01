@@ -161,7 +161,7 @@ class Triad(object):
             ii = np.argmax(tr.data)
             self.beam = [tr.stats.starttime + tr.stats.delta * ii, tr.data[ii]]
             self.BFS = tr
-    def get_waveform(self,start, end, sps,fl,fh, method):
+    def get_waveform(self,start, end, sps,fl,fh, method, envl=True):
         st = Stream()
         streams = [(sta[0].split('.')[0], sta[0].split('.')[1],'*',"?HZ", start, end) for sta in self.stations]
         if method[0] == "SDS":
@@ -204,9 +204,10 @@ class Triad(object):
         npts = [x.stats.npts for x in tr]
         st = tr.copy()
         if st.count() == 3 and np.mean(npts) == npts[0]:
-            st.normalize()
-            for tr in st:
-                tr.data = envelope(tr.data)
+            if envl:
+                st.normalize()
+                for tr in st:
+                    tr.data = envelope(tr.data)
             self.data = st
         else:
             self.data = None
