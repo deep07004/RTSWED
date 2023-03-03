@@ -1,7 +1,8 @@
 import numpy as np
 from scipy.signal import hilbert
 
-def corr_corff (st):
+
+def corr_corff(st, da=1):
     z = st.select(channel="??Z")[0].data
     n = st.select(channel="??N")[0].data
     e = st.select(channel="??E")[0].data
@@ -9,7 +10,7 @@ def corr_corff (st):
     zz = np.correlate(zh,zh)
     czr = []
     aczr = []
-    for theta in range(0,360,10):
+    for theta in range(0,360,da):
         tmp = theta * np.pi/180
         m11 = np.cos(tmp)
         m12 = np.sin(tmp)
@@ -19,4 +20,7 @@ def corr_corff (st):
         rr = np.correlate(r,r)
         czr.append(zr/np.sqrt(rr*zz))
         aczr.append(zr/zz)
-    return np.array(czr), np.array(aczr)
+    x = np.array(czr)
+    y = np.array(aczr)
+    baz =  np.argmax(x) * da
+    return baz
