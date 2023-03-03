@@ -6,7 +6,6 @@ from geographiclib.geodesic import Geodesic
 import matplotlib.pylab as plt
 import sys
 
-gl = Geodesic.WGS84
 def corr_corff (st):
     z = st.select(channel="??Z")[0].data
     n = st.select(channel="??N")[0].data
@@ -15,7 +14,7 @@ def corr_corff (st):
     zz = np.correlate(zh,zh)
     czr = []
     aczr = []
-    for theta in range(0,360):
+    for theta in range(0,360,1):
         tmp = theta * np.pi/180
         m11 = np.cos(tmp)
         m12 = np.sin(tmp)
@@ -37,21 +36,25 @@ loc =  sys.argv[3]
 channel = sys.argv[4]
 stla = float(sys.argv[5])
 stlo = float(sys.argv[6])
-print(evla,evlo,stla,stlo)
 distaz = gl.Inverse(stla,stlo,evla,evlo)
 or_baz = distaz['azi1']
 distkm = distaz['s12']/1000.0
 
 cl = Client("IRIS")
 t1 = OT + distkm/4 - 20.0
-t2 = t1 + 300
+t2 = t1 + 600
 st = cl.get_waveforms(net,sta, loc, channel, t1,t2)
-st.select(channel="BH2")[0].stats.channel ="BHE"
-st.select(channel="BH1")[0].stats.channel ="BHN"
+for tr in st:
+    if  tr.stats.channel[-1]=="1":
+        tr.stats.channel = tr.stats.channel[0:2]+"N"
+    elif tr.stats.channel[-1]=="2":
+         tr.stats.channel = tr.stats.channel[0:2]+"E"
+    else:
+        pass
 st.filter('bandpass',freqmin=0.02, freqmax=0.04)
-st.plot()
+#st.plot()
 x, y = corr_corff(st)
-print(np.argmax(x),np.argmax(y),or_baz)
-plt.plot(x)
-plt.plot(y)
-plt.show()
+print(net, sta, np.argmax(x),np.argmax(y),or_baz%360)
+#plt.plot(x)
+#plt.plot(y)
+#plt.show()

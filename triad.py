@@ -6,6 +6,31 @@ from obspy.clients.fdsn.client import Client
 from geographiclib.geodesic import Geodesic
 from obspy.signal import cross_correlation
 from obspy.signal.filter import envelope
+from scipy.signal import hilbert
+
+
+def pol_azm(st, da=1):
+    z = st.select(channel="??Z")[0].data
+    n = st.select(channel="??N")[0].data
+    e = st.select(channel="??E")[0].data
+    zh = np.imag(hilbert(z))
+    zz = np.correlate(zh,zh)
+    czr = []
+    aczr = []
+    for theta in range(0,360,da):
+        tmp = theta * np.pi/180
+        m11 = np.cos(tmp)
+        m12 = np.sin(tmp)
+        r = n*m11 + e*m12
+        #t = n*-m12 + e*m11
+        zr = np.correlate(zh,r)
+        rr = np.correlate(r,r)
+        czr.append(zr/np.sqrt(rr*zz))
+        aczr.append(zr/zz)
+    x = np.array(czr)
+    y = np.array(aczr)
+    baz =  np.argmax(x) * da
+    return baz
 
 def request_data(i, td, start, end, sps,fl,fh, method):
     st = Stream()
@@ -77,6 +102,7 @@ class Triad(object):
         self.data = None
         self.beam = None
         self.BFS = None
+        self.polazm = None
     
     def calc_dis_ang(self):
         gl = Geodesic.WGS84
@@ -211,6 +237,69 @@ class Triad(object):
             self.data = st
         else:
             self.data = None
+    
+    def polarization(self, method):
+        if self.detection:
+            st = Stream()
+            start = self.beam[0] - 50
+            end = self.beam[0] + 200
+            streams = [(sta[0].split('.')[0], sta[0].split('.')[1],'*',"?H?", start, end) for sta in self.stations]
+            if method[0] == "SDS":
+                sds = SDS(method[1])
+                try:
+                    st += sds.get_waveforms_bulk(streams)
+                except:
+                    pass
+            if method[0] == "FDSNWS":
+                fdsnws = Client(method[1])
+                try:
+                    st += fdsnws.get_waveforms_bulk(streams)
+                except:
+                    pass
+            if st.count() > 0:
+                st.merge(fill_value=0)
+                st.detrend("demean")
+                st.detrend("linear")
+                st.filter('bandpass', freqmin=0.02, freqmax=0.04)
+                st.resample(20, window='cosine')
+                sss = [tr.stats.starttime for tr in st]
+                eee = [tr.stats.endtime for tr in st]
+                sss.sort(reverse=True)
+                eee.sort()
+                t1 = sss[0] + (1000000-sss[0].microsecond)/1000000
+                t2 = eee[0] - eee[0].microsecond/1000000
+                if (t2-t1) < 100 :
+                    st.clear()
+                else:
+                    st.trim(t1,t2)
+            tr = Stream()
+            for sta in self.stations:
+                station = sta[0].split('.')[1]
+                _tmp = st.select(station=station)
+                if _tmp.select(channel="HH?"): 
+                    xtr =  _tmp.select(channel="HH?")
+                else:
+                    xtr = _tmp.select(channel="BH?")
+                if xtr.count()==3:
+                    for a in xtr:
+                        tr.append(a)
+        
+            if tr.count() == 9:
+                _tmp = tr.select(channel="??Z")
+                zz = _tmp[0].copy()
+                sps = zz.stats.sampling_rate
+                t1 = np.ceil((self.CX[0]*self.alpha[0] + self.CY[0]*self.alpha[1]) * sps) 
+                t2 = np.ceil((self.CX[1]*self.alpha[0] + self.CY[1]*self.alpha[1]) * sps)
+                t3 = np.ceil((self.CX[2]*self.alpha[0] + self.CY[2]*self.alpha[1]) * sps)
+                zz.data = np.roll(_tmp[0].data, int(t1)) + np.roll(_tmp[1].data, int(t2)) + np.roll(_tmp[2].data, int(t3))
+                _tmp = tr.select(channel="??N")
+                nn = _tmp[0].copy()
+                nn.data = np.roll(_tmp[0].data, int(t1)) + np.roll(_tmp[1].data, int(t2)) + np.roll(_tmp[2].data, int(t3))
+                _tmp = tr.select(channel="??E")
+                ee = _tmp[0].copy()
+                ee.data = np.roll(_tmp[0].data, int(t1)) + np.roll(_tmp[1].data, int(t2)) + np.roll(_tmp[2].data, int(t3))
+                trpol = Stream([zz,nn,ee])
+                self.polazm = pol_azm(trpol,da=1)
 
     def reset(self):
         self.cc = np.zeros(3)
