@@ -14,7 +14,7 @@ Triad:
 # Method to load seismic waveforms for processing. Here all three methods
 # supported by obspy to load seimic waveform data can be used. i.e. FDSNWS-
 # dataselect, SeedLink, and SDS archive. 
-#Source: [FDSNWS, http://service.iris.edu]
+#Source: [FDSNWS, IRIS]
 #Source: [SDS, /home/deep/CWP/Landslide/Tonga/buffer]
 Source: [SDS, /home/deep/CWP/Landslide/Turkey]
 

@@ -20,7 +20,7 @@ def maketriad(inv, minlen=10, maxlen=600, minang=30, maxang=120):
       traids : list of triad
     """
     gl = Geodesic.WGS84
-    sta_list = [[nt.code+'.'+sta.code,sta.latitude,sta.longitude,sta.elevation] for nt in inv for sta in nt.stations]
+    sta_list = [[nt.code+'.'+sta.code+'.'+sta.channels[0].code[0:2],sta.latitude,sta.longitude,sta.elevation] for nt in inv for sta in nt.stations]
 
     stations = pd.DataFrame(sta_list)
     #stations.set_index(0,inplace=True)

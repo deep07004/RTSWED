@@ -34,7 +34,7 @@ def pol_azm(st, da=1):
 
 def request_data(i, td, start, end, sps,fl,fh, method):
     st = Stream()
-    streams = [(sta[0].split('.')[0], sta[0].split('.')[1],'*',"?HZ",start, end) for sta in td.stations]
+    streams = [(sta[0].split('.')[0], sta[0].split('.')[1],'*',sta[0].split('.')[2]+"Z",start, end) for sta in td.stations]
 
     if method[0] == "SDS":
         sds = SDS(method[1])
@@ -72,8 +72,7 @@ def request_data(i, td, start, end, sps,fl,fh, method):
         try:
             tr +=  st.select(station=s).sort(reverse=True)[0]
         except:
-            print("No data for stations %s" %sta)
-            return (-1,-1)
+            return (i,tr)
     npts = [x.stats.npts for x in tr]
     st = tr.copy()
     if st.count() == 3 and np.mean(npts) == npts[0]:
@@ -82,8 +81,74 @@ def request_data(i, td, start, end, sps,fl,fh, method):
             tr.data = envelope(tr.data)
         return (i, st)
     else:
-        return (-1,-1)
+        return (i,Stream())
 
+def request_data_all(i, td,  method):
+    st = Stream()
+    start = td.beam[0] - 50
+    end = td.beam[0] + 200
+    streams = [(sta[0].split('.')[0], sta[0].split('.')[1],'*',sta[0].split('.')[2]+'?', start, end) for sta in td.stations]
+    if method[0] == "SDS":
+        sds = SDS(method[1])
+        try:
+            st += sds.get_waveforms_bulk(streams)
+        except:
+            pass
+    if method[0] == "FDSNWS":
+        fdsnws = Client(method[1])
+        try:
+            st += fdsnws.get_waveforms_bulk(streams)
+        except:
+            pass
+    tr = Stream()
+    if st.count() >= 9:
+        for sta in td.stations:
+            station = sta[0].split('.')[1]
+            _tmp = st.select(station=station)
+            if _tmp.select(channel="HH?"): 
+                xtr =  _tmp.select(channel="HH?")
+            else:
+                xtr = _tmp.select(channel="BH?")
+            if xtr.count()==3:
+                for a in xtr:
+                    tr.append(a)
+    if tr.count() > 0:
+        try:
+            tr.merge(fill_value=0)
+            tr.detrend("demean")
+            tr.detrend("linear")
+            tr.filter('bandpass', freqmin=0.02, freqmax=0.04)
+            tr.resample(20, window='cosine')
+            sss = [x.stats.starttime for x in st]
+            eee = [x.stats.endtime for x in st]
+            sss.sort(reverse=True)
+            eee.sort()
+            t1 = sss[0] + (1000000-sss[0].microsecond)/1000000
+            t2 = eee[0] - eee[0].microsecond/1000000
+            if (t2-t1) < 100 :
+                tr.clear()
+            else:
+                tr.trim(t1,t2)
+        except Exception as e:
+            print(e)
+
+    if tr.count() == 9:
+        trpol = Stream()
+        try:
+            for cmp in ['??Z','??N','??E']:
+                _tmp = tr.select(channel=cmp)
+                zz = _tmp[0].copy()
+                sps = zz.stats.sampling_rate
+                t1 = np.ceil((td.CX[0]*td.alpha[0] + td.CY[0]*td.alpha[1]) * sps) 
+                t2 = np.ceil((td.CX[1]*td.alpha[0] + td.CY[1]*td.alpha[1]) * sps)
+                t3 = np.ceil((td.CX[2]*td.alpha[0] + td.CY[2]*td.alpha[1]) * sps)
+                zz.data = np.roll(_tmp[0].data, int(t1)) + np.roll(_tmp[1].data, int(t2)) + np.roll(_tmp[2].data, int(t3))
+                trpol.append(zz)
+        except:
+            return(i,Stream())
+        return(i,trpol)
+    else:
+        return(i,Stream())
 
 class Triad(object):
     def __init__(self, stations=[]):
@@ -238,69 +303,6 @@ class Triad(object):
         else:
             self.data = None
     
-    def polarization(self, method):
-        if self.detection:
-            st = Stream()
-            start = self.beam[0] - 50
-            end = self.beam[0] + 200
-            streams = [(sta[0].split('.')[0], sta[0].split('.')[1],'*',"?H?", start, end) for sta in self.stations]
-            if method[0] == "SDS":
-                sds = SDS(method[1])
-                try:
-                    st += sds.get_waveforms_bulk(streams)
-                except:
-                    pass
-            if method[0] == "FDSNWS":
-                fdsnws = Client(method[1])
-                try:
-                    st += fdsnws.get_waveforms_bulk(streams)
-                except:
-                    pass
-            if st.count() > 0:
-                st.merge(fill_value=0)
-                st.detrend("demean")
-                st.detrend("linear")
-                st.filter('bandpass', freqmin=0.02, freqmax=0.04)
-                st.resample(20, window='cosine')
-                sss = [tr.stats.starttime for tr in st]
-                eee = [tr.stats.endtime for tr in st]
-                sss.sort(reverse=True)
-                eee.sort()
-                t1 = sss[0] + (1000000-sss[0].microsecond)/1000000
-                t2 = eee[0] - eee[0].microsecond/1000000
-                if (t2-t1) < 100 :
-                    st.clear()
-                else:
-                    st.trim(t1,t2)
-            tr = Stream()
-            for sta in self.stations:
-                station = sta[0].split('.')[1]
-                _tmp = st.select(station=station)
-                if _tmp.select(channel="HH?"): 
-                    xtr =  _tmp.select(channel="HH?")
-                else:
-                    xtr = _tmp.select(channel="BH?")
-                if xtr.count()==3:
-                    for a in xtr:
-                        tr.append(a)
-        
-            if tr.count() == 9:
-                _tmp = tr.select(channel="??Z")
-                zz = _tmp[0].copy()
-                sps = zz.stats.sampling_rate
-                t1 = np.ceil((self.CX[0]*self.alpha[0] + self.CY[0]*self.alpha[1]) * sps) 
-                t2 = np.ceil((self.CX[1]*self.alpha[0] + self.CY[1]*self.alpha[1]) * sps)
-                t3 = np.ceil((self.CX[2]*self.alpha[0] + self.CY[2]*self.alpha[1]) * sps)
-                zz.data = np.roll(_tmp[0].data, int(t1)) + np.roll(_tmp[1].data, int(t2)) + np.roll(_tmp[2].data, int(t3))
-                _tmp = tr.select(channel="??N")
-                nn = _tmp[0].copy()
-                nn.data = np.roll(_tmp[0].data, int(t1)) + np.roll(_tmp[1].data, int(t2)) + np.roll(_tmp[2].data, int(t3))
-                _tmp = tr.select(channel="??E")
-                ee = _tmp[0].copy()
-                ee.data = np.roll(_tmp[0].data, int(t1)) + np.roll(_tmp[1].data, int(t2)) + np.roll(_tmp[2].data, int(t3))
-                trpol = Stream([zz,nn,ee])
-                self.polazm = pol_azm(trpol,da=1)
-
     def reset(self):
         self.cc = np.zeros(3)
         self.dt = np.zeros(3)
@@ -472,20 +474,39 @@ class Triads(object):
             start = end - 300
         processes = []
         with concurrent.futures.ProcessPoolExecutor() as executor:
-            for i, td in enumerate(self.triads):
-               
+            for i, td in enumerate(self.triads):            
                 p = executor.submit(request_data,i, td, start, end, cfg['target_sps'],fl,fh, cfg['Source'])
                 processes.append(p)
             pbar = tqdm(total=len(processes), desc='Overall progress')
             for f in concurrent.futures.as_completed(processes):
-                jj = f.result()[0]
-                if jj == -1:
-                    continue
+                i = f.result()[0]
+                st = f.result()[1]
+                if st.count() ==3:
+                    self.triads[i].data = st
+                    self.triads[i].have_data = True
                 else:
-                    self.triads[jj].data = f.result()[1]
-                    self.triads[jj].have_data = True
+                    print("No data for triad %d" %i)
                 pbar.update(n=1)
-    def map_plot(self,center=[0.0,0.0],x=20,y=20):
+    def polarization(self, method):
+        import concurrent.futures
+        from tqdm import tqdm
+        processes = []
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            for i, td in enumerate(self.triads):
+                if td.detection:
+                    p = executor.submit(request_data_all,i, td, method)
+                    processes.append(p)
+            pbar = tqdm(total=len(processes), desc='Overall progress')
+            for f in concurrent.futures.as_completed(processes):
+                i = f.result()[0]
+                st = f.result()[1]
+                if st.count() ==3:
+                    self.triads[i].polazm = pol_azm(st,da=1)
+                else:
+                    self.triads[i].polazm = -999.00
+                pbar.update(n=1)
+
+    def map_plot(self,center=[0.0,0.0],x=20,y=20,polazm=False):
         import pygmt
         import pandas as pd
         proj = "A%f/%f/5i" %(center[0],center[1])
@@ -495,7 +516,10 @@ class Triads(object):
         sta= []
         for td in self.triads:
             if td.detection and (td.apvel > 2.5 and td.apvel<5.5):
-                sta.append([td.clon,td.clat,td.azm, 1.0])
+                if polazm and td.polazm > -900.0:
+                    sta.append([td.clon,td.clat,td.polazm, 1.0])
+                else:
+                    sta.append([td.clon,td.clat,td.azm, 1.0])
         s = pd.DataFrame(sta)
         fig.plot(x=center[0],y=center[1],style="a0.8c",color="red")
         if len(s) > 1:
