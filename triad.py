@@ -233,11 +233,12 @@ class Triad(object):
                 alpha = np.linalg.lstsq(self.Amat, self.dt,rcond=None)[0]
                 self.alpha = alpha
                 self.apvel = 1.0/np.sqrt(np.sum(alpha**2))
-                azm = np.arctan2(alpha[0],alpha[1]) * 180.0/np.pi + 180
-                if azm > 180:
-                    azm -= 360.0
-                self.azm = azm
-                self.detection = True
+                if self.apvel > 2.4  and self.apvel < 5.1:
+                    azm = np.arctan2(alpha[0],alpha[1]) * 180.0/np.pi + 180
+                    if azm > 180:
+                        azm -= 360.0
+                    self.azm = azm
+                    self.detection = True
         else:
             pass
     def beamform(self):
@@ -382,6 +383,11 @@ class Triads(object):
     
     def copy(self):
         return copy.deepcopy(self)
+    
+    def correlate(self):
+        for td in self.triads:
+            shift = np.max(td.dis) / 2.0
+            td.correlate(shift=shift)
     
     def extend(self, triad_list):
         if isinstance(triad_list, list):
